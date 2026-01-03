@@ -5,7 +5,7 @@ import { playwright } from "@vitest/browser-playwright";
 export default defineConfig({
   plugins: [react()],
   test: {
-    include: ["browserTests/**/*.test.ts"],
+    include: ["tests/browserTests/**/*.test.ts"],
     browser: {
       enabled: true,
       provider: playwright(),
