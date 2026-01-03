@@ -2,7 +2,7 @@
   "name": "kvozy",
   "type": "module",
   "private": true,
-  "version": "0.0.1",
+  "version": "0.2.0",
   "description": "Simple, minimal React library for binding localStorage keys to React state",
   "scripts": {
     "test": "vitest",

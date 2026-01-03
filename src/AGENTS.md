@@ -49,15 +49,17 @@ kvozy/
 - BindValue class works only with strings
 - Keep API simple and predictable
 
-### localStorage Only
+### Flexible Storage
 
-- No optional storage parameter
-- Always use `window.localStorage` (mocked in tests)
-- No support for other storage backends (for now)
+- Optional storage parameter (Storage type)
+- Supports localStorage, sessionStorage, or in-memory
+- In-memory storage when storage is omitted or undefined
+- Unit tests use simple mock storage
+- Browser tests test all three storage types
 
 ### Undefined Handling
 
-- Return `undefined` when localStorage key doesn't exist
+- Return `undefined` when storage key doesn't exist
 - Don't throw errors for missing keys
 - Handle undefined gracefully in React layer
 
@@ -74,41 +76,65 @@ kvozy/
 - **Location**: `unitTests/bindValue.test.ts`
 - **Purpose**: Test `bindValue` class logic
 - **Environment**: Node (no real DOM)
-- **Storage**: Mock localStorage using Map
+- **Storage**: Pass mock storage explicitly to each test
 
 **Test Coverage Requirements**:
 
-- ✓ Creates BindValue instance with key
-- ✓ Loads initial value from localStorage
+- ✓ Creates BindValue instance with mock storage
+- ✓ Loads initial value from mock storage
 - ✓ `getValue()` returns current value
 - ✓ `getValue()` returns `undefined` when key doesn't exist
-- ✓ `set()` updates localStorage and internal value
+- ✓ `set()` updates mock storage and internal value
 - ✓ `subscribe()` receives updates on `set()`
 - ✓ `subscribe()` returns working unsubscribe function
 - ✓ Multiple subscribers receive updates
 - ✓ Unsubscribed callback doesn't receive updates
 - ✓ `subscribe()` does NOT call callback immediately (only on value changes)
 - ✓ Callbacks are only invoked on value changes, not on subscription
+- ✓ Works with in-memory storage (no storage parameter)
+- ✓ Works with explicit `storage: undefined`
+- ✓ Data persists across instances with same key (in-memory storage)
 
-**Mock localStorage Example**:
+**Mock Storage Helper**:
 
 ```typescript
-const mockLocalStorage = new Map<string, string>();
+function createMockStorage(): Storage {
+  const mockStorage = new Map<string, string>();
 
-global.localStorage = {
-  getItem: (key) => mockLocalStorage.get(key) ?? null,
-  setItem: (key, value) => mockLocalStorage.set(key, value),
-} as Storage;
+  return {
+    get length() {
+      return mockStorage.size;
+    },
+    clear() {
+      mockStorage.clear();
+    },
+    getItem(key: string) {
+      return mockStorage.get(key) ?? null;
+    },
+    key(index: number) {
+      const keys = Array.from(mockStorage.keys());
+      return keys[index] ?? null;
+    },
+    removeItem(key: string) {
+      mockStorage.delete(key);
+    },
+    setItem(key: string, value: string) {
+      mockStorage.set(key, value);
+    },
+  };
+}
 ```
 
 ### Browser Tests (Playwright)
 
 - **Location**: `browserTests/useStorage.test.ts`
-- **Purpose**: Test React integration and real localStorage
+- **Purpose**: Test React integration with all storage types
 - **Environment**: Real browser (Chrome, Firefox, Webkit)
 - **Tools**: Vitest browser mode with Playwright provider
 
 **Test Coverage Requirements**:
+
+**localStorage Tests:**
 
 - ✓ `useStorage` returns `{ value, setValue }`
 - ✓ Initial value from bindValue
@@ -116,6 +142,17 @@ global.localStorage = {
 - ✓ Multiple components sharing same bindValue sync
 - ✓ Unsubscribe on component unmount
 - ✓ Real localStorage integration across browsers
+
+**sessionStorage Tests:**
+
+- ✓ All same tests as localStorage
+- ✓ Verify data persists within tab but not across tabs
+
+**In-Memory Storage Tests:**
+
+- ✓ All same tests as localStorage
+- ✓ Data does NOT persist across page reloads
+- ✓ Data persists across instances with same key
 
 ## Build Process
 
@@ -143,6 +180,7 @@ global.localStorage = {
 ```typescript
 interface BindValueOptions {
   key: string;
+  storage?: Storage; // localStorage, sessionStorage, or undefined for in-memory
 }
 ```
 
@@ -176,6 +214,25 @@ interface UseStorageReturn {
 
 ```typescript
 function useStorage(binding: BindValue): UseStorageReturn;
+```
+
+## Storage Usage Examples
+
+```typescript
+// localStorage - persists across browser sessions
+const localBinding = bindValue({ key: "theme", storage: localStorage });
+
+// sessionStorage - persists within the same tab
+const sessionBinding = bindValue({ key: "form-data", storage: sessionStorage });
+
+// In-memory - no persistence, graceful fallback
+const memoryBinding = bindValue({ key: "temp-state" });
+
+// Graceful fallback when localStorage is unavailable (e.g., incognito mode)
+const safeBinding = bindValue({
+  key: "some-key",
+  storage: localStorage ?? undefined,
+});
 ```
 
 ## Development Workflow

@@ -14,9 +14,11 @@ This architecture makes it easy to add connectors for other frameworks (Vue, Sve
 ## Features
 
 - Framework-agnostic core (bindValue)
+- Flexible storage support (localStorage, sessionStorage, in-memory)
+- Graceful fallback to in-memory storage when storage is unavailable
 - Thin React integration (useStorage)
 - String-only values (simple, predictable)
-- Real localStorage backend
+- Real localStorage/backend storage
 - Subscription-based reactivity
 - TypeScript support
 - Easy to extend to other frameworks
@@ -44,6 +46,25 @@ const Component = () => {
   return <input value={value || ''} onChange={(e) => setValue(e.target.value)} />;
 };
 ```
+
+## Why In-Memory Storage?
+
+In-memory storage provides a graceful fallback when persistent storage is unavailable, such as:
+
+- **Incognito/Private Mode**: Some browsers disable localStorage in private browsing
+- **Storage Quota Exceeded**: When storage limits are reached
+- **Cookie/Storage Disabled**: When users have disabled cookies/storage
+
+```typescript
+// This code works even if localStorage is unavailable (e.g., incognito mode)
+const bindedValue = bindValue({
+  key: "some-key",
+  storage: localStorage ?? undefined,
+});
+// Falls back to in-memory storage, so your code continues to work
+```
+
+The in-memory storage ensures your application remains functional, maintaining session state without throwing errors or breaking your user experience.
 
 ## API Reference
 
@@ -155,6 +176,38 @@ const Component = () => {
 };
 ```
 
+### Using Different Storage Types
+
+Kvozy supports localStorage, sessionStorage, and in-memory storage:
+
+```typescript
+import { bindValue, useStorage } from 'kvozy';
+
+// localStorage - persists across browser sessions
+const localBinding = bindValue({ key: 'theme', storage: localStorage });
+
+// sessionStorage - persists within the same tab
+const sessionBinding = bindValue({ key: 'form-data', storage: sessionStorage });
+
+// In-memory - no persistence, graceful fallback
+const memoryBinding = bindValue({ key: 'temp-state' });
+
+const LocalComponent = () => {
+  const { value, setValue } = useStorage(localBinding);
+  return <div>Theme: {value || 'light'}</div>;
+};
+
+const SessionComponent = () => {
+  const { value, setValue } = useStorage(sessionBinding);
+  return <div>Form data: {value || 'empty'}</div>;
+};
+
+const MemoryComponent = () => {
+  const { value, setValue } = useStorage(memoryBinding);
+  return <div>Temp: {value || 'empty'}</div>;
+};
+```
+
 ### Persisting Form Data
 
 ```typescript
@@ -254,51 +307,6 @@ function useStorage(binding: BindValue): UseStorageReturn {
 }
 ```
 
-## Testing
-
-### Unit Tests (Node)
-
-Run unit tests for `bindValue`:
-
-```bash
-npm test
-```
-
-Tests are located in `unitTests/bindValue.test.ts` and use mocked localStorage.
-
-### Browser Tests (Playwright)
-
-Run browser tests for React integration:
-
-```bash
-npm run test:browser
-```
-
-Tests are located in `browserTests/useStorage.test.ts` and run on Chrome, Firefox, and Webkit.
-
-## Browser Support
-
-- Chrome >= 87
-- Firefox >= 78
-- Safari >= 15.4
-- Edge >= 88
-
-## TypeScript Support
-
-Kvozy is written in TypeScript and provides full type definitions:
-
-```typescript
-import {
-  bindValue,
-  useStorage,
-  type BindValue,
-  type UseStorageReturn,
-} from "kvozy";
-
-const binding: BindValue = bindValue({ key: "test" });
-const { value, setValue }: UseStorageReturn = useStorage(binding);
-```
-
 ## Limitations
 
 - **String-only values**: Kvozy only supports string values. For objects or arrays, serialize them as JSON.
@@ -312,11 +320,3 @@ const { value, setValue }: UseStorageReturn = useStorage(binding);
 - [ ] Angular connector
 - [ ] SSR support
 - [ ] Cross-tab synchronization
-
-## License
-
-ISC
-
-## Contributing
-
-Contributions are welcome! Please read `src/AGENTS.md` for development guidelines.
