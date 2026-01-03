@@ -50,3 +50,7 @@ You have to run tests after each task:
 pnpm test:ci
 pnpm test:browser
 ```
+Also run the build to verify the errors:
+```
+pnpm build
+```

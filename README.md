@@ -29,6 +29,8 @@ npm install kvozy
 
 ## Quick Start
 
+> ⚠️ **Note:** `bindValue` is an internal API. Use `useStorage` for React components. Direct usage of `bindValue` is not recommended.
+
 ```typescript
 import { bindValue, useStorage } from 'kvozy';
 
@@ -45,47 +47,7 @@ const Component = () => {
 
 ## API Reference
 
-### bindValue(options)
-
-Creates a storage binding to localStorage.
-
-**Parameters:**
-
-- `options` (object, required)
-  - `key` (string, required) - localStorage key
-
-**Returns:** `BindValue` instance
-
-**Methods:**
-
-- `getValue()` - returns `string | undefined`
-- `set(value: string)` - updates localStorage and notifies subscribers
-- `subscribe(callback)` - subscribe to value changes, returns unsubscribe function
-
-**Behavior:**
-
-- `subscribe()` does NOT call the callback immediately when subscribing
-- Callbacks are only invoked when value changes via `set()`
-
-**Example:**
-
-```typescript
-const binding = bindValue({ key: "user-name" });
-
-// Get current value
-const currentValue = binding.getValue();
-
-// Set new value
-binding.set("Alice");
-
-// Subscribe to changes
-const unsubscribe = binding.subscribe((newValue) => {
-  console.log("Value changed:", newValue);
-});
-
-// Unsubscribe when done
-unsubscribe();
-```
+> ⚠️ **Note:** `bindValue` is an internal API. Use `useStorage` for React components. Direct usage of `bindValue` is not recommended.
 
 ### useStorage(binding)
 
