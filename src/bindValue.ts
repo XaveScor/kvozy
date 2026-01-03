@@ -4,6 +4,8 @@ export interface BindValueOptions<T> {
   serialize: (value: T) => string;
   deserialize: (serialized: string) => T;
   storage?: Storage;
+  version?: string;
+  migrate?: (oldSerialized: string, oldVersion: string | undefined) => T;
 }
 
 const memoryStorage = new Map<string, string>();
@@ -65,8 +67,44 @@ export class BindValue<T> {
       return this.options.defaultValue;
     }
 
+    let oldVersion: string | undefined;
+    let serializedValue: string;
+
+    if (rawValue.startsWith("\x00")) {
+      const parts = rawValue.split("\x00");
+      if (parts.length >= 3) {
+        oldVersion = parts[1];
+        serializedValue = parts.slice(2).join("\x00");
+      } else {
+        serializedValue = rawValue;
+      }
+    } else {
+      serializedValue = rawValue;
+    }
+
+    const currentVersion = this.options.version;
+
+    if (oldVersion !== currentVersion) {
+      if (this.options.migrate) {
+        try {
+          const migratedValue = this.options.migrate(
+            serializedValue,
+            oldVersion,
+          );
+          this.saveToStorage(migratedValue);
+          return migratedValue;
+        } catch {
+          this.storage.removeItem(this.options.key);
+          return this.options.defaultValue;
+        }
+      } else {
+        this.storage.removeItem(this.options.key);
+        return this.options.defaultValue;
+      }
+    }
+
     try {
-      return this.options.deserialize(rawValue);
+      return this.options.deserialize(serializedValue);
     } catch {
       return this.options.defaultValue;
     }
@@ -75,7 +113,16 @@ export class BindValue<T> {
   private saveToStorage(value: T): void {
     try {
       const serialized = this.options.serialize(value);
-      this.storage.setItem(this.options.key, serialized);
+      const version = this.options.version;
+
+      if (version) {
+        this.storage.setItem(
+          this.options.key,
+          `\x00${version}\x00${serialized}`,
+        );
+      } else {
+        this.storage.setItem(this.options.key, serialized);
+      }
     } catch {}
   }
 

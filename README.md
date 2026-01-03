@@ -22,6 +22,7 @@ This architecture makes it easy to add connectors for other frameworks (Vue, Sve
 - Subscription-based reactivity
 - TypeScript support
 - Required default values for safety
+- Schema versioning and migration support
 - Easy to extend to other frameworks
 
 ## Installation
@@ -87,6 +88,8 @@ Options for creating a BindValue instance.
 - `serialize` (function, required) - Convert value to string: `(value: T) => string`
 - `deserialize` (function, required) - Convert string to value: `(serialized: string) => T`
 - `storage` (Storage, optional) - localStorage, sessionStorage, or undefined for in-memory
+- `version` (string, optional) - Schema version for migration support
+- `migrate` (function, optional) - Migration function: `(oldSerialized: string, oldVersion: string | undefined) => T`
 
 ### useStorage<T>(binding)
 
@@ -293,6 +296,124 @@ const Form = () => {
 ```
 
 ### Counter Example
+
+```typescript
+const counterBinding = bindValue<number>({
+  key: 'counter',
+  defaultValue: 0,
+  serialize: (v) => String(v),
+  deserialize: (s) => Number(s),
+});
+
+const Counter = () => {
+  const { value, setValue } = useStorage(counterBinding);
+
+  return (
+    <div>
+      <p>Count: {value}</p>
+      <button onClick={() => setValue(value + 1)}>
+        Increment
+      </button>
+      <button onClick={() => setValue(value - 1)}>
+        Decrement
+      </button>
+      <button onClick={() => setValue(0)}>
+        Reset
+      </button>
+    </div>
+  );
+};
+```
+
+## Schema Versioning and Migration
+
+Kvozy supports schema evolution through optional versioning and migration functions. This allows you to safely update your data structure without breaking existing users' stored data.
+
+### Basic Versioning
+
+```typescript
+const userBinding = bindValue<User>({
+  key: "user",
+  defaultValue: { name: "", age: 0 },
+  serialize: (v) => JSON.stringify(v),
+  deserialize: (s) => JSON.parse(s),
+  version: "1.0.0",
+});
+```
+
+### Migration Example
+
+When you change your data structure, provide a migration function:
+
+```typescript
+// Version 1.0.0: stored as string
+const themeBindingV1 = bindValue<string>({
+  key: "theme",
+  defaultValue: "light",
+  serialize: (v) => v,
+  deserialize: (s) => s,
+});
+
+// Version 2.0.0: store as object with additional metadata
+const themeBindingV2 = bindValue<{ value: string; lastUpdated: number }>({
+  key: "theme",
+  defaultValue: { value: "light", lastUpdated: Date.now() },
+  serialize: (v) => JSON.stringify(v),
+  deserialize: (s) => JSON.parse(s),
+  version: "2.0.0",
+  migrate: (oldSerialized, oldVersion) => {
+    if (oldVersion === "1.0.0" || oldVersion === undefined) {
+      // Migrate from string to object
+      return {
+        value: oldSerialized,
+        lastUpdated: Date.now(),
+      };
+    }
+    // Fallback to default for unknown versions
+    return { value: "light", lastUpdated: Date.now() };
+  },
+});
+```
+
+### Common Migration Patterns
+
+**Add new field:**
+
+```typescript
+migrate: (oldSerialized, oldVersion) => {
+  const oldData = JSON.parse(oldSerialized);
+  return { ...oldData, newField: "default" };
+};
+```
+
+**Rename field:**
+
+```typescript
+migrate: (oldSerialized) => {
+  const oldData = JSON.parse(oldSerialized);
+  return { newName: oldData.oldName };
+};
+```
+
+**Change data type:**
+
+```typescript
+migrate: (oldSerialized) => {
+  const dateString = oldSerialized;
+  return { date: new Date(dateString) };
+};
+```
+
+### Migration Behavior
+
+- When `version` is provided, values are stored with a version prefix
+- On load, if versions mismatch, the `migrate` function is called
+- If `migrate` is undefined or fails, the `defaultValue` is used
+- Old data is automatically cleaned up when using default fallback
+- Migration receives the raw serialized string (not deserialized)
+- Migration failures are handled silently
+
+This ensures your application works even when users have old data formats, and new users get the default structure.
 
 ```typescript
 const counterBinding = bindValue<number>({

@@ -185,6 +185,8 @@ interface BindValueOptions<T> {
   serialize: (value: T) => string;
   deserialize: (serialized: string) => T;
   storage?: Storage; // localStorage, sessionStorage, or undefined for in-memory
+  version?: string; // Optional version for schema evolution
+  migrate?: (oldSerialized: string, oldVersion: string | undefined) => T; // Migration function
 }
 ```
 
@@ -218,6 +220,139 @@ interface UseStorageReturn<T> {
 
 ```typescript
 function useStorage<T>(binding: BindValue<T>): UseStorageReturn<T>;
+```
+
+## Versioning and Migration
+
+Kvozy supports schema evolution through optional versioning and migration functions.
+
+### Storage Format
+
+- **No version**: Stores only the serialized value (backwards compatible)
+- **With version**: Stores `\x00<version>\x00<serializedValue>` using null byte separator
+
+### Versioning Behavior
+
+1. **When version is undefined**: Behaves like before, stores only serialized value
+2. **When version is defined**: Stores with version prefix
+3. **On load**: Compares stored version with current version
+4. **Version mismatch**:
+   - If `migrate` is defined: Calls `migrate(oldSerialized, oldVersion)`, stores result with new version
+   - If `migrate` is undefined or migration fails: Uses `defaultValue`, clears old value from storage
+5. **Version match**: Deserializes normally
+
+### Migration Function Signature
+
+```typescript
+migrate?: (oldSerialized: string, oldVersion: string | undefined) => T
+```
+
+- Receives the raw serialized string from storage (not deserialized)
+- Receives the old version string, or `undefined` for unversioned data
+- Must return a value of type `T`
+- Migration failures are handled silently (falls back to `defaultValue`)
+
+### Versioning Examples
+
+```typescript
+// Simple versioning without migration
+const userBinding = bindValue<{ name: string }>({
+  key: "user",
+  defaultValue: { name: "" },
+  serialize: (v) => JSON.stringify(v),
+  deserialize: (s) => JSON.parse(s),
+  version: "1.0.0",
+  storage: localStorage,
+});
+
+// Versioning with migration from old format
+const settingsBinding = bindValue<{ theme: string; language: string }>({
+  key: "settings",
+  defaultValue: { theme: "light", language: "en" },
+  serialize: (v) => JSON.stringify(v),
+  deserialize: (s) => JSON.parse(s),
+  version: "2.0.0",
+  migrate: (oldSerialized, oldVersion) => {
+    if (oldVersion === "1.0.0") {
+      // Migrate from version 1.0.0 (just theme string) to 2.0.0 (object)
+      const theme = oldSerialized;
+      return { theme, language: "en" };
+    }
+    // Fallback for unversioned data
+    return { theme: "light", language: "en" };
+  },
+  storage: localStorage,
+});
+
+// Migration from unversioned data
+const counterBinding = bindValue<{ count: number; max: number }>({
+  key: "counter",
+  defaultValue: { count: 0, max: 100 },
+  serialize: (v) => JSON.stringify(v),
+  deserialize: (s) => JSON.parse(s),
+  version: "1.0.0",
+  migrate: (oldSerialized, oldVersion) => {
+    // oldVersion is undefined for unversioned data
+    if (oldVersion === undefined) {
+      const count = Number(oldSerialized);
+      return { count, max: 100 };
+    }
+    return { count: 0, max: 100 };
+  },
+  storage: localStorage,
+});
+```
+
+### Migration Patterns
+
+**Pattern 1: Add new field**
+
+```typescript
+// Old: string
+// New: { value: string, timestamp: number }
+migrate: (oldSerialized) => ({
+  value: oldSerialized,
+  timestamp: Date.now(),
+});
+```
+
+**Pattern 2: Rename field**
+
+```typescript
+// Old: { username: string }
+// New: { name: string }
+migrate: (oldSerialized) => {
+  const oldData = JSON.parse(oldSerialized);
+  return { name: oldData.username };
+};
+```
+
+**Pattern 3: Change type**
+
+```typescript
+// Old: string "2023-01-01"
+// New: { date: Date, formatted: string }
+migrate: (oldSerialized) => {
+  const date = new Date(oldSerialized);
+  return {
+    date,
+    formatted: date.toISOString(),
+  };
+};
+```
+
+**Pattern 4: Multi-version migration**
+
+```typescript
+migrate: (oldSerialized, oldVersion) => {
+  if (oldVersion === "1.0.0") {
+    return migrateFrom1to2(oldSerialized);
+  }
+  if (oldVersion === "2.0.0") {
+    return migrateFrom2to3(oldSerialized);
+  }
+  return defaultValue; // Fallback
+};
 ```
 
 ## Storage Usage Examples
