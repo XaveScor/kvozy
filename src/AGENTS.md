@@ -43,10 +43,11 @@ kvozy/
 
 ## Code Style Guidelines
 
-### String-Only Values
+### Type-Safe Generic API
 
-- No generics - all values are `string | undefined`
-- BindValue class works only with strings
+- Generic type parameter `<T>` for type safety
+- Custom serialize/deserialize functions for any data type
+- Required defaultValue for safety
 - Keep API simple and predictable
 
 ### Flexible Storage
@@ -175,62 +176,105 @@ function createMockStorage(): Storage {
 
 ## API Design
 
-### BindValueOptions
+### BindValueOptions<T>
 
 ```typescript
-interface BindValueOptions {
+interface BindValueOptions<T> {
   key: string;
+  defaultValue: T;
+  serialize: (value: T) => string;
+  deserialize: (serialized: string) => T;
   storage?: Storage; // localStorage, sessionStorage, or undefined for in-memory
 }
 ```
 
-### BindValue Class
+### BindValue<T> Class
 
 ```typescript
-class BindValue {
-  constructor(options: BindValueOptions);
-  getValue(): string | undefined;
-  set(value: string): void;
-  subscribe(callback: (value: string | undefined) => void): () => void;
+class BindValue<T> {
+  constructor(options: BindValueOptions<T>);
+  getValue(): T;
+  set(value: T): void;
+  subscribe(callback: (value: T) => void): () => void;
 }
 ```
 
-### bindValue Function
+### bindValue<T> Function
 
 ```typescript
-function bindValue(options: BindValueOptions): BindValue;
+function bindValue<T>(options: BindValueOptions<T>): BindValue<T>;
 ```
 
-### UseStorageReturn
+### UseStorageReturn<T>
 
 ```typescript
-interface UseStorageReturn {
-  value: string | undefined;
-  setValue: (value: string) => void;
+interface UseStorageReturn<T> {
+  value: T;
+  setValue: (value: T) => void;
 }
 ```
 
-### useStorage Hook
+### useStorage<T> Hook
 
 ```typescript
-function useStorage(binding: BindValue): UseStorageReturn;
+function useStorage<T>(binding: BindValue<T>): UseStorageReturn<T>;
 ```
 
 ## Storage Usage Examples
 
 ```typescript
+// Number type
+const counterBinding = bindValue<number>({
+  key: "counter",
+  defaultValue: 0,
+  serialize: (v) => String(v),
+  deserialize: (s) => Number(s),
+});
+
+// Object type
+interface User {
+  name: string;
+  age: number;
+}
+const userBinding = bindValue<User>({
+  key: "user",
+  defaultValue: { name: "", age: 0 },
+  serialize: (v) => JSON.stringify(v),
+  deserialize: (s) => JSON.parse(s),
+});
+
 // localStorage - persists across browser sessions
-const localBinding = bindValue({ key: "theme", storage: localStorage });
+const localBinding = bindValue<number>({
+  key: "theme",
+  defaultValue: 0,
+  serialize: (v) => String(v),
+  deserialize: (s) => Number(s),
+  storage: localStorage,
+});
 
 // sessionStorage - persists within the same tab
-const sessionBinding = bindValue({ key: "form-data", storage: sessionStorage });
+const sessionBinding = bindValue<string>({
+  key: "form-data",
+  defaultValue: "",
+  serialize: (v) => v,
+  deserialize: (s) => s,
+  storage: sessionStorage,
+});
 
 // In-memory - no persistence, graceful fallback
-const memoryBinding = bindValue({ key: "temp-state" });
+const memoryBinding = bindValue<boolean>({
+  key: "temp-state",
+  defaultValue: false,
+  serialize: (v) => String(v),
+  deserialize: (s) => s === "true",
+});
 
 // Graceful fallback when localStorage is unavailable (e.g., incognito mode)
-const safeBinding = bindValue({
+const safeBinding = bindValue<string>({
   key: "some-key",
+  defaultValue: "",
+  serialize: (v) => v,
+  deserialize: (s) => s,
   storage: localStorage ?? undefined,
 });
 ```
@@ -265,14 +309,14 @@ The architecture is designed for easy framework connectors. When adding new fram
 import { ref, onMounted, onUnmounted } from "vue";
 import { type BindValue } from "./bindValue";
 
-export function useStorageVue(binding: BindValue) {
+export function useStorageVue<T>(binding: BindValue<T>) {
   const value = ref(binding.getValue());
 
   onMounted(() => {
-    binding.subscribe((newValue) => (value.value = newValue));
+    binding.subscribe((newValue: T) => (value.value = newValue));
   });
 
-  const setValue = (newValue: string) => binding.set(newValue);
+  const setValue = (newValue: T) => binding.set(newValue);
 
   return { value, setValue };
 }
@@ -281,11 +325,11 @@ export function useStorageVue(binding: BindValue) {
 ## Common Pitfalls
 
 1. **Don't add logic to useStorage** - Keep it thin, all logic in bindValue
-2. **Don't add storage parameter** - localStorage only
-3. **Don't use generics** - Strings only
-4. **Don't forget to unsubscribe** - Always return cleanup from useEffect
-5. **Don't mock localStorage in browser tests** - Use real browser localStorage
-6. **Don't add dependencies** - Keep minimal, only React peer dependency
+2. **Don't forget to unsubscribe** - Always return cleanup from useEffect
+3. **Don't mock localStorage in browser tests** - Use real browser localStorage
+4. **Don't add dependencies** - Keep minimal, only React peer dependency
+5. **Always provide defaultValue** - Required for type safety and error handling
+6. **Remember serialize can fail silently** - In-memory value is kept but storage not updated
 
 ## Testing Commands
 

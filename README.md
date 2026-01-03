@@ -14,13 +14,14 @@ This architecture makes it easy to add connectors for other frameworks (Vue, Sve
 ## Features
 
 - Framework-agnostic core (bindValue)
+- Type-safe generic API with custom serialization/deserialization
 - Flexible storage support (localStorage, sessionStorage, in-memory)
 - Graceful fallback to in-memory storage when storage is unavailable
 - Thin React integration (useStorage)
-- String-only values (simple, predictable)
 - Real localStorage/backend storage
 - Subscription-based reactivity
 - TypeScript support
+- Required default values for safety
 - Easy to extend to other frameworks
 
 ## Installation
@@ -36,14 +37,19 @@ npm install kvozy
 ```typescript
 import { bindValue, useStorage } from 'kvozy';
 
-// Define the binding
-const myValue = bindValue({ key: 'my-key' });
+// Define the binding with type, serialize, deserialize, and defaultValue
+const myValue = bindValue<string>({
+  key: 'my-key',
+  defaultValue: '',
+  serialize: (v) => v,
+  deserialize: (s) => s,
+});
 
 // Use in component
 const Component = () => {
   const { value, setValue } = useStorage(myValue);
 
-  return <input value={value || ''} onChange={(e) => setValue(e.target.value)} />;
+  return <input value={value} onChange={(e) => setValue(e.target.value)} />;
 };
 ```
 
@@ -70,23 +76,37 @@ The in-memory storage ensures your application remains functional, maintaining s
 
 > ⚠️ **Note:** `bindValue` is an internal API. Use `useStorage` for React components. Direct usage of `bindValue` is not recommended.
 
-### useStorage(binding)
+### BindValueOptions<T>
+
+Options for creating a BindValue instance.
+
+**Parameters:**
+
+- `key` (string, required) - Storage key
+- `defaultValue` (T, required) - Default value when key doesn't exist or deserialize fails
+- `serialize` (function, required) - Convert value to string: `(value: T) => string`
+- `deserialize` (function, required) - Convert string to value: `(serialized: string) => T`
+- `storage` (Storage, optional) - localStorage, sessionStorage, or undefined for in-memory
+
+### useStorage<T>(binding)
 
 React hook that connects a BindValue instance to React state.
 
 **Parameters:**
 
-- `binding` (BindValue, required) - binding instance from bindValue
+- `binding` (BindValue<T>, required) - binding instance from bindValue
 
 **Returns:** `{ value, setValue }`
 
-- `value` - `string | undefined` - current value from localStorage
-- `setValue` - `(value: string) => void` - function to update value
+- `value` - `T` - current value from storage
+- `setValue` - `(value: T) => void` - function to update value
 
 **Behavior:**
 
 - `subscribe()` does NOT call the callback immediately when subscribing
 - Callbacks are only invoked when the value changes via `set()`
+- If `serialize()` fails, in-memory value is kept but storage is NOT updated
+- If `deserialize()` fails, `defaultValue` is returned
 
 **Example:**
 
@@ -95,7 +115,7 @@ const Component = () => {
   const { value, setValue } = useStorage(myBinding);
 
   return <div>
-    <p>Current value: {value || '(empty)'}</p>
+    <p>Current value: {value}</p>
     <button onClick={() => setValue('new value')}>
       Update Value
     </button>
@@ -110,7 +130,12 @@ const Component = () => {
 ```typescript
 import { bindValue, useStorage } from 'kvozy';
 
-const usernameBinding = bindValue({ key: 'username' });
+const usernameBinding = bindValue<string>({
+  key: 'username',
+  defaultValue: '',
+  serialize: (v) => v,
+  deserialize: (s) => s,
+});
 
 const LoginForm = () => {
   const { value, setValue } = useStorage(usernameBinding);
@@ -120,7 +145,7 @@ const LoginForm = () => {
       <label>
         Username:
         <input
-          value={value || ''}
+          value={value}
           onChange={(e) => setValue(e.target.value)}
         />
       </label>
@@ -134,7 +159,12 @@ const LoginForm = () => {
 ```typescript
 import { bindValue, useStorage } from 'kvozy';
 
-const themeBinding = bindValue({ key: 'theme' });
+const themeBinding = bindValue<string>({
+  key: 'theme',
+  defaultValue: 'light',
+  serialize: (v) => v,
+  deserialize: (s) => s,
+});
 
 const ThemeToggle = () => {
   const { value, setValue } = useStorage(themeBinding);
@@ -164,15 +194,20 @@ Both components stay in sync automatically!
 
 ### Handling Undefined Values
 
-When a localStorage key doesn't exist, `getValue()` and `useStorage` return `undefined`:
+When a localStorage key doesn't exist, `defaultValue` is returned:
 
 ```typescript
-const binding = bindValue({ key: 'non-existent-key' });
-console.log(binding.getValue()); // undefined
+const binding = bindValue<string>({
+  key: 'non-existent-key',
+  defaultValue: 'default value',
+  serialize: (v) => v,
+  deserialize: (s) => s,
+});
+console.log(binding.getValue()); // 'default value'
 
 const Component = () => {
   const { value } = useStorage(binding);
-  return <div>{value || 'No value set'}</div>;
+  return <div>{value}</div>;
 };
 ```
 
@@ -184,17 +219,34 @@ Kvozy supports localStorage, sessionStorage, and in-memory storage:
 import { bindValue, useStorage } from 'kvozy';
 
 // localStorage - persists across browser sessions
-const localBinding = bindValue({ key: 'theme', storage: localStorage });
+const localBinding = bindValue<string>({
+  key: 'theme',
+  defaultValue: 'light',
+  serialize: (v) => v,
+  deserialize: (s) => s,
+  storage: localStorage,
+});
 
 // sessionStorage - persists within the same tab
-const sessionBinding = bindValue({ key: 'form-data', storage: sessionStorage });
+const sessionBinding = bindValue<string>({
+  key: 'form-data',
+  defaultValue: '',
+  serialize: (v) => v,
+  deserialize: (s) => s,
+  storage: sessionStorage,
+});
 
 // In-memory - no persistence, graceful fallback
-const memoryBinding = bindValue({ key: 'temp-state' });
+const memoryBinding = bindValue<string>({
+  key: 'temp-state',
+  defaultValue: '',
+  serialize: (v) => v,
+  deserialize: (s) => s,
+});
 
 const LocalComponent = () => {
   const { value, setValue } = useStorage(localBinding);
-  return <div>Theme: {value || 'light'}</div>;
+  return <div>Theme: {value}</div>;
 };
 
 const SessionComponent = () => {
@@ -211,7 +263,12 @@ const MemoryComponent = () => {
 ### Persisting Form Data
 
 ```typescript
-const formBinding = bindValue({ key: 'form-data' });
+const formBinding = bindValue<string>({
+  key: 'form-data',
+  defaultValue: '',
+  serialize: (v) => v,
+  deserialize: (s) => s,
+});
 
 const Form = () => {
   const { value, setValue } = useStorage(formBinding);
@@ -238,22 +295,26 @@ const Form = () => {
 ### Counter Example
 
 ```typescript
-const counterBinding = bindValue({ key: 'counter' });
+const counterBinding = bindValue<number>({
+  key: 'counter',
+  defaultValue: 0,
+  serialize: (v) => String(v),
+  deserialize: (s) => Number(s),
+});
 
 const Counter = () => {
   const { value, setValue } = useStorage(counterBinding);
-  const count = parseInt(value || '0', 10);
 
   return (
     <div>
-      <p>Count: {count}</p>
-      <button onClick={() => setValue(String(count + 1))}>
+      <p>Count: {value}</p>
+      <button onClick={() => setValue(value + 1)}>
         Increment
       </button>
-      <button onClick={() => setValue(String(count - 1))}>
+      <button onClick={() => setValue(value - 1)}>
         Decrement
       </button>
-      <button onClick={() => setValue('0')}>
+      <button onClick={() => setValue(0)}>
         Reset
       </button>
     </div>
@@ -268,18 +329,19 @@ const Counter = () => {
 All storage logic lives in `bindValue` class:
 
 - Framework-agnostic
+- Type-safe generic API
 - Manages localStorage operations
 - Handles subscriptions
 - Can be used with any UI framework
 
 ```typescript
-class BindValue {
-  private value: string | undefined;
-  private subscribers: Set<(value: string | undefined) => void>;
+class BindValue<T> {
+  private value: T;
+  private subscribers: Set<(value: T) => void>;
 
-  getValue(): string | undefined;
-  set(value: string): void;
-  subscribe(callback): () => void;
+  getValue(): T;
+  set(value: T): void;
+  subscribe(callback: (value: T) => void): () => void;
 }
 ```
 
@@ -293,7 +355,7 @@ Thin wrapper that connects `bindValue` to React:
 - Returns `{ value, setValue }`
 
 ```typescript
-function useStorage(binding: BindValue): UseStorageReturn {
+function useStorage<T>(binding: BindValue<T>): UseStorageReturn<T> {
   const [value, setValue] = useState(binding.getValue());
 
   useEffect(() => {
@@ -301,7 +363,7 @@ function useStorage(binding: BindValue): UseStorageReturn {
     return unsubscribe;
   }, [binding]);
 
-  const set = (newValue: string) => binding.set(newValue);
+  const set = (newValue: T) => binding.set(newValue);
 
   return { value, setValue: set };
 }
@@ -309,9 +371,9 @@ function useStorage(binding: BindValue): UseStorageReturn {
 
 ## Limitations
 
-- **String-only values**: Kvozy only supports string values. For objects or arrays, serialize them as JSON.
 - **No SSR support**: Currently designed for client-side only (requires `window.localStorage`).
 - **No cross-tab sync**: Changes in one tab don't update other tabs automatically.
+- **Serialize failures**: If `serialize()` fails, the value is kept in memory but not persisted to storage (graceful degradation).
 
 ## Future Plans
 
@@ -320,3 +382,4 @@ function useStorage(binding: BindValue): UseStorageReturn {
 - [ ] Angular connector
 - [ ] SSR support
 - [ ] Cross-tab synchronization
+- [ ] Console warnings on serialization/deserialization errors for debugging

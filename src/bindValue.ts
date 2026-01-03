@@ -1,5 +1,8 @@
-export interface BindValueOptions {
+export interface BindValueOptions<T> {
   key: string;
+  defaultValue: T;
+  serialize: (value: T) => string;
+  deserialize: (serialized: string) => T;
   storage?: Storage;
 }
 
@@ -27,41 +30,53 @@ const inMemoryStorage: Storage = {
   },
 };
 
-export class BindValue {
-  private value: string | undefined;
-  private subscribers: Set<(value: string | undefined) => void>;
+export class BindValue<T> {
+  private value: T;
+  private subscribers: Set<(value: T) => void>;
   private storage: Storage;
 
-  constructor(private options: BindValueOptions) {
+  constructor(private options: BindValueOptions<T>) {
     this.storage = options.storage ?? inMemoryStorage;
     this.subscribers = new Set();
     this.value = this.loadFromStorage();
   }
 
-  getValue(): string | undefined {
+  getValue(): T {
     return this.value;
   }
 
-  set(newValue: string): void {
+  set(newValue: T): void {
     this.value = newValue;
     this.saveToStorage(newValue);
     this.notifySubscribers();
   }
 
-  subscribe(callback: (value: string | undefined) => void): () => void {
+  subscribe(callback: (value: T) => void): () => void {
     this.subscribers.add(callback);
     return () => {
       this.subscribers.delete(callback);
     };
   }
 
-  private loadFromStorage(): string | undefined {
-    const value = this.storage.getItem(this.options.key);
-    return value !== null ? value : undefined;
+  private loadFromStorage(): T {
+    const rawValue = this.storage.getItem(this.options.key);
+
+    if (rawValue === null) {
+      return this.options.defaultValue;
+    }
+
+    try {
+      return this.options.deserialize(rawValue);
+    } catch {
+      return this.options.defaultValue;
+    }
   }
 
-  private saveToStorage(value: string): void {
-    this.storage.setItem(this.options.key, value);
+  private saveToStorage(value: T): void {
+    try {
+      const serialized = this.options.serialize(value);
+      this.storage.setItem(this.options.key, serialized);
+    } catch {}
   }
 
   private notifySubscribers(): void {
@@ -71,6 +86,6 @@ export class BindValue {
   }
 }
 
-export function bindValue(options: BindValueOptions): BindValue {
+export function bindValue<T>(options: BindValueOptions<T>): BindValue<T> {
   return new BindValue(options);
 }

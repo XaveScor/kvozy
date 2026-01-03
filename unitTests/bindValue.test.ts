@@ -27,33 +27,66 @@ function createMockStorage(): Storage {
   };
 }
 
+const createFailingSerializer = () => {
+  return (value: any) => {
+    if (value.hasCycle || value.hasFunction || value.nonSerializable) {
+      throw new Error("Cannot serialize");
+    }
+    return JSON.stringify(value);
+  };
+};
+
 describe("bindValue", () => {
   describe("with mock storage", () => {
     it("creates BindValue instance", () => {
       const mockStorage = createMockStorage();
-      const binding = bindValue({ key: "test", storage: mockStorage });
+      const binding = bindValue<string>({
+        key: "test",
+        defaultValue: "default",
+        storage: mockStorage,
+        serialize: (v) => v,
+        deserialize: (s) => s,
+      });
 
       expect(binding).toBeInstanceOf(BindValue);
     });
 
-    it("getValue() returns undefined when key doesn't exist", () => {
+    it("getValue() returns defaultValue when key doesn't exist", () => {
       const mockStorage = createMockStorage();
-      const binding = bindValue({ key: "test", storage: mockStorage });
+      const binding = bindValue<string>({
+        key: "test",
+        defaultValue: "default",
+        storage: mockStorage,
+        serialize: (v) => v,
+        deserialize: (s) => s,
+      });
 
-      expect(binding.getValue()).toBeUndefined();
+      expect(binding.getValue()).toBe("default");
     });
 
     it("getValue() returns current value", () => {
       const mockStorage = createMockStorage();
       mockStorage.setItem("test", "existing value");
-      const binding = bindValue({ key: "test", storage: mockStorage });
+      const binding = bindValue<string>({
+        key: "test",
+        defaultValue: "default",
+        storage: mockStorage,
+        serialize: (v) => v,
+        deserialize: (s) => s,
+      });
 
       expect(binding.getValue()).toBe("existing value");
     });
 
     it("set() updates mockStorage", () => {
       const mockStorage = createMockStorage();
-      const binding = bindValue({ key: "test", storage: mockStorage });
+      const binding = bindValue<string>({
+        key: "test",
+        defaultValue: "default",
+        storage: mockStorage,
+        serialize: (v) => v,
+        deserialize: (s) => s,
+      });
 
       binding.set("new value");
 
@@ -62,7 +95,13 @@ describe("bindValue", () => {
 
     it("set() updates internal value", () => {
       const mockStorage = createMockStorage();
-      const binding = bindValue({ key: "test", storage: mockStorage });
+      const binding = bindValue<string>({
+        key: "test",
+        defaultValue: "default",
+        storage: mockStorage,
+        serialize: (v) => v,
+        deserialize: (s) => s,
+      });
 
       binding.set("new value");
 
@@ -71,7 +110,13 @@ describe("bindValue", () => {
 
     it("subscribe() returns unsubscribe function", () => {
       const mockStorage = createMockStorage();
-      const binding = bindValue({ key: "test", storage: mockStorage });
+      const binding = bindValue<string>({
+        key: "test",
+        defaultValue: "default",
+        storage: mockStorage,
+        serialize: (v) => v,
+        deserialize: (s) => s,
+      });
       const callback = vi.fn();
       const unsubscribe = binding.subscribe(callback);
 
@@ -82,7 +127,13 @@ describe("bindValue", () => {
 
     it("subscribe() notifies subscribers on set()", () => {
       const mockStorage = createMockStorage();
-      const binding = bindValue({ key: "test", storage: mockStorage });
+      const binding = bindValue<string>({
+        key: "test",
+        defaultValue: "default",
+        storage: mockStorage,
+        serialize: (v) => v,
+        deserialize: (s) => s,
+      });
       const callback = vi.fn();
 
       binding.subscribe(callback);
@@ -93,7 +144,13 @@ describe("bindValue", () => {
 
     it("unsubscribe() prevents further notifications", () => {
       const mockStorage = createMockStorage();
-      const binding = bindValue({ key: "test", storage: mockStorage });
+      const binding = bindValue<string>({
+        key: "test",
+        defaultValue: "default",
+        storage: mockStorage,
+        serialize: (v) => v,
+        deserialize: (s) => s,
+      });
       const callback = vi.fn();
 
       const unsubscribe = binding.subscribe(callback);
@@ -107,7 +164,13 @@ describe("bindValue", () => {
 
     it("multiple subscribers all receive updates", () => {
       const mockStorage = createMockStorage();
-      const binding = bindValue({ key: "test", storage: mockStorage });
+      const binding = bindValue<string>({
+        key: "test",
+        defaultValue: "default",
+        storage: mockStorage,
+        serialize: (v) => v,
+        deserialize: (s) => s,
+      });
       const callback1 = vi.fn();
       const callback2 = vi.fn();
       const callback3 = vi.fn();
@@ -125,7 +188,13 @@ describe("bindValue", () => {
 
     it("set() overwrites existing value", () => {
       const mockStorage = createMockStorage();
-      const binding = bindValue({ key: "test", storage: mockStorage });
+      const binding = bindValue<string>({
+        key: "test",
+        defaultValue: "default",
+        storage: mockStorage,
+        serialize: (v) => v,
+        deserialize: (s) => s,
+      });
 
       binding.set("first");
       binding.set("second");
@@ -137,7 +206,13 @@ describe("bindValue", () => {
 
     it("subscribe() does not call callback immediately", () => {
       const mockStorage = createMockStorage();
-      const binding = bindValue({ key: "test", storage: mockStorage });
+      const binding = bindValue<string>({
+        key: "test",
+        defaultValue: "default",
+        storage: mockStorage,
+        serialize: (v) => v,
+        deserialize: (s) => s,
+      });
       const callback = vi.fn();
 
       binding.subscribe(callback);
@@ -147,7 +222,13 @@ describe("bindValue", () => {
 
     it("subscribe() calls callback only on value change", () => {
       const mockStorage = createMockStorage();
-      const binding = bindValue({ key: "test", storage: mockStorage });
+      const binding = bindValue<string>({
+        key: "test",
+        defaultValue: "default",
+        storage: mockStorage,
+        serialize: (v) => v,
+        deserialize: (s) => s,
+      });
       const callback = vi.fn();
 
       binding.subscribe(callback);
@@ -159,23 +240,166 @@ describe("bindValue", () => {
     });
   });
 
+  describe("with number type", () => {
+    it("works with number type", () => {
+      const mockStorage = createMockStorage();
+      const binding = bindValue<number>({
+        key: "counter",
+        defaultValue: 0,
+        storage: mockStorage,
+        serialize: (v) => String(v),
+        deserialize: (s) => Number(s),
+      });
+
+      expect(binding.getValue()).toBe(0);
+      binding.set(42);
+      expect(binding.getValue()).toBe(42);
+      expect(mockStorage.getItem("counter")).toBe("42");
+    });
+  });
+
+  describe("with object type", () => {
+    it("works with object type", () => {
+      const mockStorage = createMockStorage();
+      const binding = bindValue<{ name: string; age: number }>({
+        key: "user",
+        defaultValue: { name: "", age: 0 },
+        storage: mockStorage,
+        serialize: (v) => JSON.stringify(v),
+        deserialize: (s) => JSON.parse(s),
+      });
+
+      expect(binding.getValue()).toEqual({ name: "", age: 0 });
+      binding.set({ name: "John", age: 30 });
+      expect(binding.getValue()).toEqual({ name: "John", age: 30 });
+      expect(mockStorage.getItem("user")).toBe(
+        JSON.stringify({ name: "John", age: 30 }),
+      );
+    });
+  });
+
+  describe("deserialize failure", () => {
+    it("returns defaultValue when deserialize fails", () => {
+      const mockStorage = createMockStorage();
+      mockStorage.setItem("test", "invalid json");
+
+      const binding = bindValue<{ data: string }>({
+        key: "test",
+        defaultValue: { data: "default" },
+        storage: mockStorage,
+        serialize: (v) => JSON.stringify(v),
+        deserialize: (s) => JSON.parse(s),
+      });
+
+      expect(binding.getValue()).toEqual({ data: "default" });
+    });
+  });
+
+  describe("serialize failure", () => {
+    it("keeps in-memory value when serialize fails", () => {
+      const mockStorage = createMockStorage();
+      const failingSerialize = createFailingSerializer();
+
+      const binding = bindValue<{ data: string; nonSerializable?: boolean }>({
+        key: "test",
+        defaultValue: { data: "default" },
+        storage: mockStorage,
+        serialize: failingSerialize,
+        deserialize: (s) => JSON.parse(s),
+      });
+
+      binding.set({ data: "value", nonSerializable: true });
+      expect(binding.getValue()).toEqual({
+        data: "value",
+        nonSerializable: true,
+      });
+      expect(mockStorage.getItem("test")).toBeNull();
+    });
+
+    it("handles non-serializable values gracefully, then successfully stores serializable value", () => {
+      const mockStorage = createMockStorage();
+      const failingSerialize = createFailingSerializer();
+
+      const binding = bindValue<{
+        data: string;
+        hasCycle?: boolean;
+        hasFunction?: boolean;
+      }>({
+        key: "test",
+        defaultValue: { data: "default" },
+        storage: mockStorage,
+        serialize: failingSerialize,
+        deserialize: (s) => JSON.parse(s),
+      });
+
+      binding.set({ data: "value1", hasCycle: true });
+      expect(binding.getValue()).toEqual({ data: "value1", hasCycle: true });
+      expect(mockStorage.getItem("test")).toBeNull();
+
+      binding.set({ data: "value2", hasFunction: true });
+      expect(binding.getValue()).toEqual({ data: "value2", hasFunction: true });
+      expect(mockStorage.getItem("test")).toBeNull();
+
+      binding.set({ data: "value3" });
+      expect(binding.getValue()).toEqual({ data: "value3" });
+      expect(mockStorage.getItem("test")).toBe(
+        JSON.stringify({ data: "value3" }),
+      );
+    });
+
+    it("handles always-throwing serialize function", () => {
+      const mockStorage = createMockStorage();
+      const alwaysThrow = () => {
+        throw new Error("Always fails");
+      };
+
+      const binding = bindValue<{ data: string }>({
+        key: "test",
+        defaultValue: { data: "default" },
+        storage: mockStorage,
+        serialize: alwaysThrow,
+        deserialize: (s) => JSON.parse(s),
+      });
+
+      binding.set({ data: "new value" });
+      expect(binding.getValue()).toEqual({ data: "new value" });
+      expect(mockStorage.getItem("test")).toBeNull();
+    });
+  });
+
   describe("with in-memory storage", () => {
     it("works without storage parameter", () => {
-      const binding = bindValue({ key: "test" });
+      const binding = bindValue<string>({
+        key: "test",
+        defaultValue: "default",
+        serialize: (v) => v,
+        deserialize: (s) => s,
+      });
 
       expect(binding).toBeInstanceOf(BindValue);
-      expect(binding.getValue()).toBeUndefined();
+      expect(binding.getValue()).toBe("default");
     });
 
     it("works with explicit undefined", () => {
-      const binding = bindValue({ key: "test", storage: undefined });
+      const binding = bindValue<string>({
+        key: "test",
+        defaultValue: "default",
+        storage: undefined,
+        serialize: (v) => v,
+        deserialize: (s) => s,
+      });
 
       expect(binding).toBeInstanceOf(BindValue);
-      expect(binding.getValue()).toBeUndefined();
+      expect(binding.getValue()).toBe("default");
     });
 
     it("set() updates value", () => {
-      const binding = bindValue({ key: "test" });
+      const binding = bindValue<string>({
+        key: "test",
+        defaultValue: "default",
+        serialize: (v) => v,
+        deserialize: (s) => s,
+      });
 
       binding.set("new value");
 
@@ -183,7 +407,12 @@ describe("bindValue", () => {
     });
 
     it("subscribe() works with in-memory storage", () => {
-      const binding = bindValue({ key: "test" });
+      const binding = bindValue<string>({
+        key: "test",
+        defaultValue: "default",
+        serialize: (v) => v,
+        deserialize: (s) => s,
+      });
       const callback = vi.fn();
 
       binding.subscribe(callback);
@@ -193,16 +422,36 @@ describe("bindValue", () => {
     });
 
     it("data persists across instances with same key", () => {
-      const binding1 = bindValue({ key: "shared-key" });
+      const binding1 = bindValue<string>({
+        key: "shared-key",
+        defaultValue: "default",
+        serialize: (v) => v,
+        deserialize: (s) => s,
+      });
       binding1.set("shared value");
 
-      const binding2 = bindValue({ key: "shared-key" });
+      const binding2 = bindValue<string>({
+        key: "shared-key",
+        defaultValue: "default",
+        serialize: (v) => v,
+        deserialize: (s) => s,
+      });
       expect(binding2.getValue()).toBe("shared value");
     });
 
     it("data does not mix between different keys", () => {
-      const binding1 = bindValue({ key: "key1" });
-      const binding2 = bindValue({ key: "key2" });
+      const binding1 = bindValue<string>({
+        key: "key1",
+        defaultValue: "default",
+        serialize: (v) => v,
+        deserialize: (s) => s,
+      });
+      const binding2 = bindValue<string>({
+        key: "key2",
+        defaultValue: "default",
+        serialize: (v) => v,
+        deserialize: (s) => s,
+      });
 
       binding1.set("value1");
       binding2.set("value2");

@@ -1,12 +1,12 @@
 import { useState, useEffect } from "react";
 import { type BindValue } from "./bindValue.js";
 
-export interface UseStorageReturn {
-  value: string | undefined;
-  setValue: (value: string) => void;
+export interface UseStorageReturn<T> {
+  value: T;
+  setValue: (value: T) => void;
 }
 
-export function useStorage(binding: BindValue): UseStorageReturn {
+export function useStorage<T>(binding: BindValue<T>): UseStorageReturn<T> {
   const [value, setValue] = useState(binding.getValue());
 
   useEffect(() => {
@@ -14,7 +14,7 @@ export function useStorage(binding: BindValue): UseStorageReturn {
     return unsubscribe;
   }, [binding]);
 
-  const set = (newValue: string) => {
+  const set = (newValue: T) => {
     binding.set(newValue);
   };
 
