@@ -126,6 +126,248 @@ const Component = () => {
 };
 ```
 
+## Type-Specific Shortcuts
+
+Kvozy provides type-specific shortcuts for common types, eliminating boilerplate and providing sensible defaults. Each shortcut pre-defines serialization/deserialization logic while allowing custom defaults and full feature support.
+
+### Available Shortcuts
+
+| Shortcut           | Type       | Default Value     | Storage Format        |
+| ------------------ | ---------- | ----------------- | --------------------- |
+| `bindStringValue`  | `string`   | `""`              | String as-is          |
+| `bindNumberValue`  | `number`   | `0`               | Decimal string        |
+| `bindBooleanValue` | `boolean`  | `false`           | `"true"` or `"false"` |
+| `bindJSONValue<T>` | `T`        | User must provide | JSON string           |
+| `bindEnumValue<E>` | `E` (enum) | User must provide | String/number as-is   |
+
+### bindStringValue
+
+For string values with identity serialization.
+
+```typescript
+import { bindStringValue, useStorage } from "kvozy";
+
+// Default empty string
+const nameBinding = bindStringValue({
+  key: "name",
+});
+
+// Custom default value
+const greetingBinding = bindStringValue({
+  key: "greeting",
+  defaultValue: "Hello",
+});
+
+// With versioning
+const themeBinding = bindStringValue({
+  key: "theme",
+  defaultValue: "light",
+  version: "2.0.0",
+  migrate: (old, oldVersion) => {
+    return "dark";
+  },
+});
+```
+
+### bindNumberValue
+
+For numeric values.
+
+```typescript
+import { bindNumberValue, useStorage } from "kvozy";
+
+// Default zero
+const counterBinding = bindNumberValue({
+  key: "counter",
+});
+
+// Custom default value
+const priceBinding = bindNumberValue({
+  key: "price",
+  defaultValue: 9.99,
+});
+
+// With storage
+const scoreBinding = bindNumberValue({
+  key: "score",
+  defaultValue: 100,
+  storage: sessionStorage,
+});
+```
+
+### bindBooleanValue
+
+For boolean values. Stores as `"true"` or `"false"` for readability in devtools.
+
+```typescript
+import { bindBooleanValue, useStorage } from "kvozy";
+
+// Default false
+const enabledBinding = bindBooleanValue({
+  key: "enabled",
+});
+
+// Custom default value
+const notificationsBinding = bindBooleanValue({
+  key: "notifications",
+  defaultValue: true,
+});
+```
+
+### bindJSONValue<T>
+
+For complex objects and arrays. Requires a default value.
+
+```typescript
+import { bindJSONValue, useStorage } from "kvozy";
+
+interface User {
+  name: string;
+  age: number;
+}
+
+// Objects
+const userBinding = bindJSONValue<User>({
+  key: "user",
+  defaultValue: { name: "", age: 0 },
+});
+
+// Arrays
+const tagsBinding = bindJSONValue<string[]>({
+  key: "tags",
+  defaultValue: [],
+});
+
+// Nested structures
+const configBinding = bindJSONValue<{
+  theme: { primary: string; secondary: string };
+  features: string[];
+}>({
+  key: "config",
+  defaultValue: {
+    theme: { primary: "#000", secondary: "#fff" },
+    features: [],
+  },
+});
+```
+
+### bindEnumValue<E>
+
+For TypeScript enums. Works with both string and number enums.
+
+```typescript
+import { bindEnumValue, useStorage } from "kvozy";
+
+// String enum
+enum Color {
+  Red = "red",
+  Green = "green",
+  Blue = "blue",
+}
+
+const colorBinding = bindEnumValue<Color>({
+  key: "color",
+  defaultValue: Color.Blue,
+});
+
+// Number enum
+enum Priority {
+  Low = 1,
+  Medium = 2,
+  High = 3,
+}
+
+const priorityBinding = bindEnumValue<Priority>({
+  key: "priority",
+  defaultValue: Priority.Low,
+});
+
+// With migration
+const statusBinding = bindEnumValue<Color>({
+  key: "status",
+  defaultValue: Color.Red,
+  version: "2.0.0",
+  migrate: (old, oldVersion) => {
+    return Color.Blue;
+  },
+});
+```
+
+### When to Use Shortcuts vs. bindValue
+
+**Use shortcuts when:**
+
+- Working with common types (string, number, boolean, JSON, enum)
+- You want less boilerplate
+- You don't need custom serialization/deserialization
+
+**Use full `bindValue` when:**
+
+- You have custom serialization/deserialization needs
+- Working with non-standard types
+- Need maximum flexibility
+
+### Comparison: Before vs. After
+
+**Before (with full API):**
+
+```typescript
+const counter = bindValue<number>({
+  key: "counter",
+  defaultValue: 0,
+  serialize: (v) => String(v),
+  deserialize: (s) => Number(s),
+});
+```
+
+**After (with shortcut):**
+
+```typescript
+const counter = bindNumberValue({
+  key: "counter",
+});
+```
+
+### Migration Examples
+
+Each shortcut supports versioning and migration just like `bindValue`.
+
+```typescript
+// Migrating object structure
+const userBinding = bindJSONValue<User>({
+  key: "user",
+  defaultValue: { name: "", age: 0, email: "" },
+  version: "2.0.0",
+  migrate: (old, oldVersion) => {
+    const oldData = JSON.parse(old);
+    return {
+      name: oldData.name,
+      age: oldData.age ?? 0,
+      email: oldData.email ?? "",
+    };
+  },
+});
+
+// Migrating enum values
+enum Theme {
+  Light = "light",
+  Dark = "dark",
+  Auto = "auto",
+}
+
+const themeBinding = bindEnumValue<Theme>({
+  key: "theme",
+  defaultValue: Theme.Light,
+  version: "2.0.0",
+  migrate: (old, oldVersion) => {
+    if (oldVersion === "1.0.0" && old === "auto-dark") {
+      return Theme.Dark;
+    }
+    return Theme.Light;
+  },
+});
+```
+
 ## Usage Examples
 
 ### Basic Usage
