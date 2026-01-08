@@ -8,6 +8,16 @@ export interface BindValueOptions<T> {
   migrate?: (oldSerialized: string, oldVersion: string | undefined) => T;
 }
 
+export interface BindValueNSOptions<T> {
+  prefix: string;
+  defaultValue: T;
+  serialize: (value: T) => string;
+  deserialize: (serialized: string) => T;
+  storage?: Storage;
+  version?: string;
+  migrate?: (oldSerialized: string, oldVersion: string | undefined) => T;
+}
+
 const memoryStorage = new Map<string, string>();
 
 const inMemoryStorage: Storage = {
@@ -135,4 +145,36 @@ export class BindValue<T> {
 
 export function bindValue<T>(options: BindValueOptions<T>): BindValue<T> {
   return new BindValue(options);
+}
+
+export function _clearInMemoryStorage(): void {
+  memoryStorage.clear();
+}
+
+export class BindValueNS<T> {
+  constructor(private options: BindValueNSOptions<T>) {
+    if (!this.options.prefix || this.options.prefix.trim() === "") {
+      throw new Error("Prefix cannot be empty");
+    }
+  }
+
+  bind(key: string): BindValue<T> {
+    if (!key || key.trim() === "") {
+      throw new Error("Key cannot be empty");
+    }
+
+    return new BindValue<T>({
+      key: `${this.options.prefix}\x1F${key}`,
+      defaultValue: this.options.defaultValue,
+      serialize: this.options.serialize,
+      deserialize: this.options.deserialize,
+      storage: this.options.storage,
+      version: this.options.version,
+      migrate: this.options.migrate,
+    });
+  }
+}
+
+export function bindValueNS<T>(options: BindValueNSOptions<T>): BindValueNS<T> {
+  return new BindValueNS(options);
 }

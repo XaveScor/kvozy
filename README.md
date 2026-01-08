@@ -1,6 +1,6 @@
-# Kvozy - React localStorage Binding Library
+# Kvozy - localStorage Binding Library
 
-Simple, minimal React library for binding localStorage keys to React state.
+Simple, minimal library for encapsulating localStorage logic.
 
 ## Overview
 
@@ -14,6 +14,7 @@ This architecture makes it easy to add connectors for other frameworks (Vue, Sve
 ## Features
 
 - Framework-agnostic core (bindValue)
+- Namespace-based bindings (bindValueNS) for grouping related keys
 - Type-safe generic API with custom serialization/deserialization
 - Flexible storage support (localStorage, sessionStorage, in-memory)
 - Graceful fallback to in-memory storage when storage is unavailable
@@ -106,10 +107,91 @@ React hook that connects a BindValue instance to React state.
 
 **Behavior:**
 
-- `subscribe()` does NOT call the callback immediately when subscribing
-- Callbacks are only invoked when the value changes via `set()`
+- `subscribe()` does NOT call callback immediately when subscribing
+- Callbacks are only invoked when value changes via `set()`
 - If `serialize()` fails, in-memory value is kept but storage is NOT updated
 - If `deserialize()` fails, `defaultValue` is returned
+
+**Example:**
+
+```typescript
+const Component = () => {
+   const { value, setValue } = useStorage(myBinding);
+
+   return <div>
+     <p>Current value: {value}</p>
+     <button onClick={() => setValue('new value')}>
+       Update Value
+     </button>
+   </div>;
+  };
+```
+
+## Namespace API
+
+> ⚠️ **Note:** `bindValueNS` is an internal API. Use `useStorageNS` for React components. Direct usage of `bindValueNS` is not recommended.
+
+### BindValueNSOptions<T>
+
+Options for creating a namespace binder. A namespace allows grouping related keys with a shared prefix and configuration.
+
+**Parameters:**
+
+- `prefix` (string, required) - Prefix for all keys in this namespace (cannot be empty or whitespace)
+- `defaultValue` (T, required) - Default value shared across all keys in namespace
+- `serialize` (function, required) - Convert value to string: `(value: T) => string`
+- `deserialize` (function, required) - Convert string to value: `(serialized: string) => T`
+- `storage` (Storage, optional) - localStorage, sessionStorage, or undefined for in-memory
+- `version` (string, optional) - Schema version for migration support
+- `migrate` (function, optional) - Migration function: `(oldSerialized: string, oldVersion: string | undefined) => T`
+
+### bindValueNS<T>(options)
+
+Factory function for creating a namespace binder.
+
+**Returns:** `BindValueNS<T>` instance
+
+**Behavior:**
+
+- Throws error if prefix is empty or whitespace-only
+- All bindings created from the namespace share the same configuration
+- Keys are combined as `${prefix}\x1F${key}` using Unit Separator
+
+### BindValueNS<T>.bind(key)
+
+Creates a individual binding for a specific key within the namespace.
+
+**Parameters:**
+
+- `key` (string, required) - Key for this specific binding
+
+**Returns:** `BindValue<T>` instance
+
+**Behavior:**
+
+- Throws error if key is empty or whitespace-only
+- Combines namespace prefix with key: `${prefix}\x1F${key}`
+- Each binding has independent subscribers and state
+
+### useStorageNS<T>(namespace, options)
+
+React hook that connects a namespace to React state with a specific key.
+
+**Parameters:**
+
+- `namespace` (BindValueNS<T>, required) - Namespace instance
+- `options: { key: string }` - Key for this specific binding
+
+**Returns:** `{ value, setValue }`
+
+- `value` - `T` - current value from storage
+- `setValue` - `(value: T) => void` - function to update value
+
+**Behavior:**
+
+- Creates a binding internally using `namespace.bind(options.key)`
+- Delegates to existing `useStorage` hook
+- Components using different keys from the same namespace don't share state
 
 **Example:**
 
@@ -293,6 +375,280 @@ const statusBinding = bindEnumValue<Color>({
 });
 ```
 
+## Namespace Type-Specific Shortcuts
+
+Kvozy provides namespace shortcuts for common types, eliminating boilerplate while maintaining the benefits of namespace-based key organization.
+
+| Shortcut             | Type       | Default Value     | Storage Format        |
+| -------------------- | ---------- | ----------------- | --------------------- |
+| `bindStringValueNS`  | `string`   | `""`              | String as-is          |
+| `bindNumberValueNS`  | `number`   | `0`               | Decimal string        |
+| `bindBooleanValueNS` | `boolean`  | `false`           | `"true"` or `"false"` |
+| `bindJSONValueNS<T>` | `T`        | User must provide | JSON string           |
+| `bindEnumValueNS<E>` | `E` (enum) | User must provide | String/number as-is   |
+
+### bindStringValueNS
+
+For string values with identity serialization.
+
+```typescript
+import { bindStringValueNS, useStorageNS } from "kvozy";
+
+// Default empty string
+const appNS = bindStringValueNS({
+  prefix: "app",
+  storage: localStorage,
+});
+
+// With custom default value
+const userNS = bindStringValueNS({
+  prefix: "user",
+  defaultValue: "guest",
+  storage: localStorage,
+});
+
+// Use in components
+const Component = () => {
+  const { value: name, setValue: setName } = useStorageNS(userNS, { key: "name" });
+  return <input value={name} onChange={(e) => setName(e.target.value)} />;
+};
+```
+
+### bindNumberValueNS
+
+For numeric values.
+
+```typescript
+import { bindNumberValueNS, useStorageNS } from "kvozy";
+
+const counterNS = bindNumberValueNS({
+  prefix: "counters",
+  storage: localStorage,
+});
+
+const { value: count, setValue: setCount } = useStorageNS(counterNS, {
+  key: "views",
+});
+```
+
+### bindBooleanValueNS
+
+For boolean values. Stores as `"true"` or `"false"` for readability in devtools.
+
+```typescript
+import { bindBooleanValueNS, useStorageNS } from "kvozy";
+
+const settingsNS = bindBooleanValueNS({
+  prefix: "settings",
+  storage: localStorage,
+});
+
+const { value: enabled, setValue: setEnabled } = useStorageNS(settingsNS, {
+  key: "notifications",
+});
+```
+
+### bindJSONValueNS<T>
+
+For complex objects and arrays. Requires a default value.
+
+```typescript
+import { bindJSONValueNS, useStorageNS } from "kvozy";
+
+interface User {
+  name: string;
+  email: string;
+}
+
+const userNS = bindJSONValueNS<User>({
+  prefix: "users",
+  defaultValue: { name: "", email: "" },
+  storage: localStorage,
+});
+
+const { value: user, setValue: setUser } = useStorageNS(userNS, {
+  key: "current",
+});
+```
+
+### bindEnumValueNS<E>
+
+For TypeScript enums. Works with both string and number enums.
+
+```typescript
+import { bindEnumValueNS, useStorageNS } from "kvozy";
+
+enum Theme {
+  Light = "light",
+  Dark = "dark",
+}
+
+const settingsNS = bindEnumValueNS<Theme>({
+  prefix: "settings",
+  defaultValue: Theme.Light,
+  storage: localStorage,
+});
+
+const { value: theme, setValue: setTheme } = useStorageNS(settingsNS, {
+  key: "theme",
+});
+```
+
+### When to Use Namespaces vs. Individual Bindings
+
+**Use namespaces when:**
+
+- You have multiple related keys (e.g., all user settings)
+- You want to share configuration across multiple keys
+- You want to organize keys by feature area (user, app, settings)
+- You want to avoid repeating serialize/deserialize logic
+
+**Use individual bindings when:**
+
+- You have a single key
+- You need different serialization logic per key
+- You want maximum flexibility per binding
+
+## Namespace Examples
+
+### Basic Namespace Usage
+
+```typescript
+import { bindValueNS, useStorageNS } from 'kvozy';
+
+// Create namespace with shared configuration
+const appNS = bindValueNS<string>({
+  prefix: 'app',
+  defaultValue: '',
+  serialize: (v) => v,
+  deserialize: (s) => s,
+  storage: localStorage,
+});
+
+// Use in component with specific key
+const Component = () => {
+  const { value, setValue } = useStorageNS(appNS, { key: 'user' });
+
+  return <input value={value} onChange={(e) => setValue(e.target.value)} />;
+};
+// Storage key will be: 'app\x1Fuser'
+```
+
+### Multiple Components Sharing Namespace
+
+```typescript
+import { bindValueNS, useStorageNS } from 'kvozy';
+
+const appNS = bindValueNS<string>({
+  prefix: 'app',
+  defaultValue: '',
+  serialize: (v) => v,
+  deserialize: (s) => s,
+  storage: localStorage,
+});
+
+const UserSettings = () => {
+  const { value: language, setValue: setLanguage } = useStorageNS(appNS, { key: 'language' });
+  const { value: theme, setValue: setTheme } = useStorageNS(appNS, { key: 'theme' });
+
+  return (
+    <div>
+      <select value={language} onChange={(e) => setLanguage(e.target.value)}>
+        <option value="en">English</option>
+        <option value="es">Spanish</option>
+      </select>
+      <button onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
+        Toggle Theme
+      </button>
+    </div>
+  );
+};
+```
+
+### Namespace with Versioning
+
+```typescript
+import { bindValueNS, useStorageNS } from "kvozy";
+
+const appNS = bindValueNS<UserData>({
+  prefix: "app",
+  defaultValue: { name: "", email: "" },
+  serialize: (v) => JSON.stringify(v),
+  deserialize: (s) => JSON.parse(s),
+  storage: localStorage,
+  version: "2.0.0",
+  migrate: (old, oldVersion) => {
+    const oldData = JSON.parse(old);
+    return { name: oldData.name, email: "" };
+  },
+});
+
+const { value: user, setValue: setUser } = useStorageNS(appNS, { key: "user" });
+```
+
+### Namespace Organization Pattern
+
+Organize your app by creating separate namespaces for different domains:
+
+```typescript
+// User-related keys
+const userNS = bindValueNS<string>({
+  prefix: "user",
+  defaultValue: "",
+  storage: localStorage,
+});
+
+// Application settings keys
+const settingsNS = bindValueNS<string>({
+  prefix: "settings",
+  defaultValue: "",
+  storage: localStorage,
+});
+
+// Temporary state keys
+const tempNS = bindValueNS<string>({
+  prefix: "temp",
+  defaultValue: "",
+  storage: undefined, // in-memory only
+});
+
+// Keys will be stored as:
+// user\x1Fname', 'user\x1Femail', 'user\x1Ftheme'
+// Settings keys: 'settings\x1Fnotifications', 'settings\x1Flanguage', 'settings\x1Ftheme'
+// Temp keys: 'temp\x1Fdraft', 'temp\x1Funsaved'
+```
+
+## Namespace Isolation
+
+Each namespace maintains complete isolation from other namespaces:
+
+```typescript
+const appNS = bindValueNS<string>({
+  prefix: "app",
+  defaultValue: "",
+  storage: localStorage,
+});
+
+const userNS = bindValueNS<string>({
+  prefix: "user",
+  defaultValue: "",
+  storage: localStorage,
+});
+
+// These are completely isolated:
+// appNS.bind('name') stores to 'app\x1Fname'
+// userNS.bind('name') stores to 'user\x1Fname'
+// No risk of key collisions between namespaces
+```
+
+**Benefits:**
+
+- **Organized storage**: Group related keys with meaningful prefixes
+- **Collision prevention**: Different prefixes create separate storage domains
+- **Shared configuration**: All bindings in a namespace inherit same settings
+- **Easy maintenance**: Update settings once for all keys in namespace
+- **Clean separation**: Logical boundaries between different app features
+
 ### When to Use Shortcuts vs. bindValue
 
 **Use shortcuts when:**
@@ -367,6 +723,37 @@ const themeBinding = bindEnumValue<Theme>({
   },
 });
 ```
+
+## Namespace Isolation
+
+Each namespace maintains complete isolation from other namespaces:
+
+```typescript
+const appNS = bindValueNS<string>({
+  prefix: "app",
+  defaultValue: "",
+  storage: localStorage,
+});
+
+const userNS = bindValueNS<string>({
+  prefix: "user",
+  defaultValue: "",
+  storage: localStorage,
+});
+
+// These are completely isolated:
+// appNS.bind('name') stores to 'app\x1Fname'
+// userNS.bind('name') stores to 'user\x1Fname'
+// No risk of key collisions between namespaces
+```
+
+**Benefits:**
+
+- **Organized storage**: Group related keys with meaningful prefixes
+- **Collision prevention**: Different prefixes create separate storage domains
+- **Shared configuration**: All bindings in a namespace inherit same settings
+- **Easy maintenance**: Update settings once for all keys in namespace
+- **Clean separation**: Logical boundaries between different app features
 
 ## Usage Examples
 
@@ -685,6 +1072,46 @@ const Counter = () => {
 };
 ```
 
+### Namespace-Based Organization
+
+Organize your app by creating separate namespaces for different domains:
+
+```typescript
+// User-related keys
+const userNS = bindValueNS<string>({
+  prefix: 'user',
+  defaultValue: '',
+  storage: localStorage,
+});
+
+// Application settings keys
+const settingsNS = bindValueNS<string>({
+  prefix: 'settings',
+  defaultValue: '',
+  storage: localStorage,
+});
+
+const UserPreferences = () => {
+  const { value: language, setValue: setLanguage } = useStorageNS(userNS, { key: 'language' });
+  const { value: notificationsEnabled, setValue: setNotifications } = useStorageNS(settingsNS, { key: 'notifications' });
+
+  return (
+    <div>
+      <select value={language} onChange={(e) => setLanguage(e.target.value)}>
+        <option value="en">English</option>
+        <option value="es">Spanish</option>
+      </select>
+      <button onClick={() => setNotifications(!notificationsEnabled)}>
+        {notificationsEnabled ? 'Disable' : 'Enable'} Notifications
+      </button>
+    </div>
+  );
+};
+
+// User keys: 'user\x1Flanguage', 'user\x1Femail', 'user\x1Ftheme'
+// Settings keys: 'settings\x1Fnotifications', 'settings\x1Flanguage', 'settings\x1Ftheme'
+```
+
 ## Architecture
 
 ### Core: bindValue
@@ -705,6 +1132,22 @@ class BindValue<T> {
   getValue(): T;
   set(value: T): void;
   subscribe(callback: (value: T) => void): () => void;
+}
+```
+
+### Namespace: BindValueNS
+
+Namespace binder for grouping related keys with shared configuration:
+
+- Manages namespace configuration (prefix, defaultValue, serialize, deserialize)
+- Provides `bind(key)` method to create individual `BindValue` instances
+- Combines prefix and key using Unit Separator: `${prefix}\x1F${key}`
+- Validates prefix and key are not empty/whitespace
+- Creates isolated storage domains for different prefixes
+
+```typescript
+class BindValueNS<T> {
+  bind(key: string): BindValue<T>;
 }
 ```
 
@@ -737,6 +1180,7 @@ function useStorage<T>(binding: BindValue<T>): UseStorageReturn<T> {
 - **No SSR support**: Currently designed for client-side only (requires `window.localStorage`).
 - **No cross-tab sync**: Changes in one tab don't update other tabs automatically.
 - **Serialize failures**: If `serialize()` fails, the value is kept in memory but not persisted to storage (graceful degradation).
+- **Namespace state isolation**: Components using the same namespace but different keys don't share React state. Each `useStorageNS(namespace, { key: 'x' })` call creates an independent binding.
 
 ## Future Plans
 
