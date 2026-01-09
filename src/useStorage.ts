@@ -6,6 +6,7 @@ export interface UseStorageReturn<T> {
   setValue: (value: T) => void;
   getRaw: () => string | null;
   setRaw: (rawValue: string) => void;
+  reset: () => void;
 }
 
 export function useStorage<T>(binding: BindValue<T>): UseStorageReturn<T> {
@@ -25,6 +26,7 @@ export function useStorage<T>(binding: BindValue<T>): UseStorageReturn<T> {
     setValue: set,
     getRaw: () => binding.getRaw(),
     setRaw: (rawValue: string) => binding.setRaw(rawValue),
+    reset: () => binding.reset(),
   };
 }
 

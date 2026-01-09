@@ -70,6 +70,12 @@ export class BindValue<T> {
     };
   }
 
+  reset(): void {
+    this.storage.removeItem(this.options.key);
+    this.value = this.options.defaultValue;
+    this.notifySubscribers();
+  }
+
   getRaw(): string | null {
     return this.storage.getItem(this.options.key);
   }

@@ -143,4 +143,143 @@ describe("useStorage with localStorage", () => {
 
     expect(renderCount).toBe(initialRenderCount);
   });
+
+  describe("reset", () => {
+    it("reset removes from localStorage", () => {
+      const binding = bindValue<string>({
+        key: "test-key",
+        defaultValue: "default",
+        storage: localStorage,
+        serialize: (v) => v,
+        deserialize: (s) => s,
+      });
+      const { result } = renderHook(() => useStorage(binding));
+
+      act(() => {
+        result.current.setValue("new value");
+      });
+
+      expect(localStorage.getItem("test-key")).toBe("new value");
+
+      act(() => {
+        result.current.reset();
+      });
+
+      expect(localStorage.getItem("test-key")).toBeNull();
+    });
+
+    it("reset sets value to defaultValue", () => {
+      const binding = bindValue<string>({
+        key: "test-key",
+        defaultValue: "default",
+        storage: localStorage,
+        serialize: (v) => v,
+        deserialize: (s) => s,
+      });
+      const { result } = renderHook(() => useStorage(binding));
+
+      act(() => {
+        result.current.setValue("new value");
+      });
+
+      expect(result.current.value).toBe("new value");
+
+      act(() => {
+        result.current.reset();
+      });
+
+      expect(result.current.value).toBe("default");
+    });
+
+    it("reset updates all components sharing same binding", () => {
+      const binding = bindValue<string>({
+        key: "shared-key",
+        defaultValue: "default",
+        storage: localStorage,
+        serialize: (v) => v,
+        deserialize: (s) => s,
+      });
+      const { result: result1 } = renderHook(() => useStorage(binding));
+      const { result: result2 } = renderHook(() => useStorage(binding));
+
+      act(() => {
+        result1.current.setValue("shared value");
+      });
+
+      expect(result1.current.value).toBe("shared value");
+      expect(result2.current.value).toBe("shared value");
+
+      act(() => {
+        result1.current.reset();
+      });
+
+      expect(result1.current.value).toBe("default");
+      expect(result2.current.value).toBe("default");
+    });
+
+    it("reset then setValue works correctly", () => {
+      const binding = bindValue<string>({
+        key: "test-key",
+        defaultValue: "default",
+        storage: localStorage,
+        serialize: (v) => v,
+        deserialize: (s) => s,
+      });
+      const { result } = renderHook(() => useStorage(binding));
+
+      act(() => {
+        result.current.setValue("first");
+      });
+
+      expect(result.current.value).toBe("first");
+      expect(localStorage.getItem("test-key")).toBe("first");
+
+      act(() => {
+        result.current.reset();
+      });
+
+      expect(result.current.value).toBe("default");
+      expect(localStorage.getItem("test-key")).toBeNull();
+
+      act(() => {
+        result.current.setValue("second");
+      });
+
+      expect(result.current.value).toBe("second");
+      expect(localStorage.getItem("test-key")).toBe("second");
+    });
+
+    it("reset with versioned data", () => {
+      const binding = bindValue<string>({
+        key: "test-key",
+        defaultValue: "default",
+        storage: localStorage,
+        serialize: (v) => v,
+        deserialize: (s) => s,
+        version: "1.0.0",
+      });
+      const { result } = renderHook(() => useStorage(binding));
+
+      act(() => {
+        result.current.setValue("some value");
+      });
+
+      expect(result.current.value).toBe("some value");
+      expect(localStorage.getItem("test-key")).toBe("\x001.0.0\x00some value");
+
+      act(() => {
+        result.current.reset();
+      });
+
+      expect(result.current.value).toBe("default");
+      expect(localStorage.getItem("test-key")).toBeNull();
+
+      act(() => {
+        result.current.setValue("new value");
+      });
+
+      expect(result.current.value).toBe("new value");
+      expect(localStorage.getItem("test-key")).toBe("\x001.0.0\x00new value");
+    });
+  });
 });
