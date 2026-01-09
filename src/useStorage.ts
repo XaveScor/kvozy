@@ -4,6 +4,8 @@ import { type BindValue, type BindValueNS } from "./bindValue.js";
 export interface UseStorageReturn<T> {
   value: T;
   setValue: (value: T) => void;
+  getRaw: () => string | null;
+  setRaw: (rawValue: string) => void;
 }
 
 export function useStorage<T>(binding: BindValue<T>): UseStorageReturn<T> {
@@ -18,7 +20,12 @@ export function useStorage<T>(binding: BindValue<T>): UseStorageReturn<T> {
     binding.set(newValue);
   };
 
-  return { value, setValue: set };
+  return {
+    value,
+    setValue: set,
+    getRaw: () => binding.getRaw(),
+    setRaw: (rawValue: string) => binding.setRaw(rawValue),
+  };
 }
 
 export function useStorageNS<T>(
