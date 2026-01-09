@@ -70,6 +70,58 @@ export class BindValue<T> {
     };
   }
 
+  getRaw(): string | null {
+    return this.storage.getItem(this.options.key);
+  }
+
+  setRaw(rawValue: string): void {
+    let deserializedValue: T;
+    const version = this.options.version;
+    let serializedPart: string;
+
+    if (version) {
+      if (!rawValue.startsWith("\x00")) {
+        return;
+      }
+
+      const parts = rawValue.split("\x00");
+      if (parts.length < 3) {
+        return;
+      }
+
+      const versionPart = parts[1];
+      if (versionPart !== version) {
+        return;
+      }
+
+      serializedPart = parts.slice(2).join("\x00");
+    } else {
+      serializedPart = rawValue;
+    }
+
+    try {
+      deserializedValue = this.options.deserialize(serializedPart);
+    } catch {
+      return;
+    }
+    const serializedValue = this.options.serialize(deserializedValue);
+    let reconstructedRaw: string;
+
+    if (version) {
+      reconstructedRaw = `\x00${version}\x00${serializedValue}`;
+    } else {
+      reconstructedRaw = serializedValue;
+    }
+
+    if (reconstructedRaw !== rawValue) {
+      return;
+    }
+
+    this.storage.setItem(this.options.key, rawValue);
+    this.value = deserializedValue;
+    this.notifySubscribers();
+  }
+
   private loadFromStorage(): T {
     const rawValue = this.storage.getItem(this.options.key);
 
